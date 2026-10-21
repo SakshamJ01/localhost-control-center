@@ -1,0 +1,38 @@
+{
+  "name": "localhost-control-center",
+  "version": "0.1.0",
+  "description": "Local-first Developer Control Center for managing local projects and services",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:all": "npm run build && npm run build:electron",
+    "start": "npm run build:electron && electron .",
+    "dev:app": "concurrently -k \"vite\" \"wait-on tcp:5173 && npm run build:electron && electron .\""
+  },
+  "keywords": [
+    "localhost",
+    "developer-tools",
+    "control-center",
+    "local-first"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "lucide-react": "^1.61.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.6",
+    "electron": "^45.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "wait-on": "^9.5.1"
+  }
+}
