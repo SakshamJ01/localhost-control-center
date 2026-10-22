@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppSettings, AuditEvent } from '../types';
+import { testAIConnection } from '../services/aiService';
 import { 
   Settings, 
   Download, 
@@ -15,7 +16,8 @@ import {
   Sparkles,
   Key,
   ExternalLink,
-  Bot
+  Bot,
+  Wifi
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -40,7 +42,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // AI Settings State
   const [aiProvider, setAiProvider] = useState<'openrouter' | 'gemini' | 'openai'>('openrouter');
   const [aiApiKey, setAiApiKey] = useState('');
-  const [aiModel, setAiModel] = useState('google/gemini-2.0-flash-001');
+  const [aiModel, setAiModel] = useState('google/gemini-2.0-flash-exp:free');
+  const [isTestingAI, setIsTestingAI] = useState(false);
+  const [aiTestResult, setAiTestResult] = useState<{
+    success: boolean;
+    latencyMs?: number;
+    message: string;
+    error?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -53,6 +62,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       });
       window.localhostApi.getAuditLog().then(setAuditEvents);
       setStatusMessage(null);
+      setAiTestResult(null);
     }
   }, [isOpen]);
 
@@ -65,6 +75,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (res.success) {
       setSettings(res.settings);
       setStatusMessage({ type: 'success', text: 'Shutdown preference updated.' });
+    }
+  };
+
+  const handleTestConnection = async () => {
+    if (!aiApiKey.trim()) {
+      setAiTestResult({
+        success: false,
+        message: 'Please paste your API key first.',
+        error: 'Missing API key'
+      });
+      return;
+    }
+
+    setIsTestingAI(true);
+    setAiTestResult(null);
+    try {
+      const res = await testAIConnection(aiProvider, aiApiKey.trim(), aiModel.trim());
+      setAiTestResult(res);
+      if (res.success) {
+        // Also automatically save verified credentials
+        const updateRes = await window.localhostApi.updateSettings({
+          ai_provider: aiProvider,
+          ai_api_key: aiApiKey.trim(),
+          ai_model: aiModel.trim()
+        });
+        if (updateRes.success) {
+          setSettings(updateRes.settings);
+        }
+      }
+    } catch (err: any) {
+      setAiTestResult({
+        success: false,
+        message: 'Connection failed',
+        error: err.message || String(err)
+      });
+    } finally {
+      setIsTestingAI(false);
     }
   };
 
@@ -281,14 +328,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onChange={e => {
                     const prov = e.target.value as any;
                     setAiProvider(prov);
-                    if (prov === 'openrouter') setAiModel('google/gemini-2.0-flash-001');
+                    setAiTestResult(null);
+                    if (prov === 'openrouter') setAiModel('google/gemini-2.0-flash-exp:free');
                     else if (prov === 'gemini') setAiModel('gemini-2.5-flash');
                     else setAiModel('gpt-4o-mini');
                   }}
                 >
-                  <option value="openrouter">OpenRouter (Recommended — 200+ Models)</option>
-                  <option value="gemini">Google Gemini API</option>
-                  <option value="openai">OpenAI API</option>
+                  <option value="openrouter">OpenRouter (Recommended — Free & 200+ Models)</option>
+                  <option value="gemini">Google Gemini API (Direct)</option>
+                  <option value="openai">OpenAI API (Direct)</option>
                 </select>
               </div>
 
@@ -319,6 +367,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <ExternalLink size={12} />
                     </a>
                   )}
+                  {aiProvider === 'openai' && (
+                    <a
+                      href="https://platform.openai.com/api-keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-cyan flex-row items-center gap-1 hover:underline"
+                    >
+                      <span>Get OpenAI API Key</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  )}
                 </div>
                 <div className="input-with-icon">
                   <Key size={16} className="input-icon" />
@@ -327,7 +386,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     type="password"
                     className="form-input with-left-icon font-mono text-xs"
                     value={aiApiKey}
-                    onChange={e => setAiApiKey(e.target.value)}
+                    onChange={e => {
+                      setAiApiKey(e.target.value);
+                      setAiTestResult(null);
+                    }}
                     placeholder={aiProvider === 'openrouter' ? 'sk-or-v1-...' : 'Paste your API key here'}
                   />
                 </div>
@@ -345,20 +407,181 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   type="text"
                   className="form-input font-mono text-sm"
                   value={aiModel}
-                  onChange={e => setAiModel(e.target.value)}
-                  placeholder="e.g. google/gemini-2.0-flash-001, anthropic/claude-3.5-sonnet"
+                  onChange={e => {
+                    setAiModel(e.target.value);
+                    setAiTestResult(null);
+                  }}
+                  placeholder="e.g. google/gemini-2.0-flash-exp:free"
                 />
-                <span className="form-help">
-                  Models like Gemini 2.0 Flash or Claude 3.5 Sonnet provide instant, deep project analysis.
-                </span>
+
+                {/* Quick Model Selector Chips */}
+                {aiProvider === 'openrouter' && (
+                  <div className="mt-2">
+                    <span className="text-xs text-muted block mb-1">Click to select model:</span>
+                    <div className="model-presets-container">
+                      <button
+                        type="button"
+                        className={`model-preset-chip ${aiModel === 'google/gemini-2.0-flash-exp:free' ? 'active' : ''}`}
+                        onClick={() => {
+                          setAiModel('google/gemini-2.0-flash-exp:free');
+                          setAiTestResult(null);
+                        }}
+                      >
+                        <span className="model-free-badge">FREE</span>
+                        <span>Gemini 2.0 Flash</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`model-preset-chip ${aiModel === 'meta-llama/llama-3.3-70b-instruct:free' ? 'active' : ''}`}
+                        onClick={() => {
+                          setAiModel('meta-llama/llama-3.3-70b-instruct:free');
+                          setAiTestResult(null);
+                        }}
+                      >
+                        <span className="model-free-badge">FREE</span>
+                        <span>Llama 3.3 70B</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`model-preset-chip ${aiModel === 'google/gemini-2.0-flash-001' ? 'active' : ''}`}
+                        onClick={() => {
+                          setAiModel('google/gemini-2.0-flash-001');
+                          setAiTestResult(null);
+                        }}
+                      >
+                        <span>Gemini 2.0 Flash (Paid)</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`model-preset-chip ${aiModel === 'anthropic/claude-3.5-sonnet' ? 'active' : ''}`}
+                        onClick={() => {
+                          setAiModel('anthropic/claude-3.5-sonnet');
+                          setAiTestResult(null);
+                        }}
+                      >
+                        <span>Claude 3.5 Sonnet</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {aiProvider === 'gemini' && (
+                  <div className="mt-2">
+                    <span className="text-xs text-muted block mb-1">Click to select model:</span>
+                    <div className="model-presets-container">
+                      <button
+                        type="button"
+                        className={`model-preset-chip ${aiModel === 'gemini-2.5-flash' ? 'active' : ''}`}
+                        onClick={() => {
+                          setAiModel('gemini-2.5-flash');
+                          setAiTestResult(null);
+                        }}
+                      >
+                        <span>gemini-2.5-flash</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`model-preset-chip ${aiModel === 'gemini-2.0-flash' ? 'active' : ''}`}
+                        onClick={() => {
+                          setAiModel('gemini-2.0-flash');
+                          setAiTestResult(null);
+                        }}
+                      >
+                        <span>gemini-2.0-flash</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {aiProvider === 'openai' && (
+                  <div className="mt-2">
+                    <span className="text-xs text-muted block mb-1">Click to select model:</span>
+                    <div className="model-presets-container">
+                      <button
+                        type="button"
+                        className={`model-preset-chip ${aiModel === 'gpt-4o-mini' ? 'active' : ''}`}
+                        onClick={() => {
+                          setAiModel('gpt-4o-mini');
+                          setAiTestResult(null);
+                        }}
+                      >
+                        <span>gpt-4o-mini</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`model-preset-chip ${aiModel === 'gpt-4o' ? 'active' : ''}`}
+                        onClick={() => {
+                          setAiModel('gpt-4o');
+                          setAiTestResult(null);
+                        }}
+                      >
+                        <span>gpt-4o</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="mt-4 flex-row gap-2">
-                <button className="btn-primary" onClick={handleSaveAISettings}>
+              {/* Action Buttons: Test Connection & Save */}
+              <div className="mt-4 flex-row gap-3 items-center flex-wrap">
+                <button
+                  type="button"
+                  className="btn-test-connection"
+                  onClick={handleTestConnection}
+                  disabled={isTestingAI}
+                >
+                  <Wifi size={15} className={isTestingAI ? 'animate-pulse text-cyan' : 'text-cyan'} />
+                  <span>{isTestingAI ? 'Testing API...' : 'Test Connection'}</span>
+                </button>
+
+                <button type="button" className="btn-primary" onClick={handleSaveAISettings}>
                   <Check size={16} />
                   <span>Save AI Configuration</span>
                 </button>
               </div>
+
+              {/* Test Result Feedback Box */}
+              {aiTestResult && (
+                <div className={`test-result-box ${aiTestResult.success ? 'success' : 'error'} animate-fade-in`}>
+                  {aiTestResult.success ? (
+                    <Check size={18} className="text-emerald flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle size={18} className="text-rose flex-shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    <div className="font-semibold">
+                      {aiTestResult.message}
+                      {aiTestResult.latencyMs ? ` (${aiTestResult.latencyMs}ms latency)` : ''}
+                    </div>
+                    {aiTestResult.error && (
+                      <div className="text-xs mt-1 text-rose font-mono break-all">
+                        {aiTestResult.error}
+                      </div>
+                    )}
+                    {!aiTestResult.success && aiProvider === 'openrouter' && (
+                      <div className="text-xs mt-2 text-cyan">
+                        💡 <strong>Free Model Option:</strong> If your OpenRouter key has zero credits, click the{' '}
+                        <button
+                          type="button"
+                          className="underline font-semibold cursor-pointer text-cyan hover:text-white"
+                          onClick={() => {
+                            setAiModel('google/gemini-2.0-flash-exp:free');
+                            setAiTestResult(null);
+                          }}
+                        >
+                          Gemini 2.0 Flash (Free)
+                        </button>{' '}
+                        chip above to run at zero cost.
+                      </div>
+                    )}
+                    {aiTestResult.success && (
+                      <div className="text-xs mt-1 text-emerald">
+                        ✓ Configuration saved! Localhost can now use AI to inspect project codebases and recommend launch scripts.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

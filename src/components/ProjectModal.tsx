@@ -214,7 +214,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
   // Run deep AI codebase and architecture analysis
   const handleRunAIAnalysis = async (targetPath?: string) => {
-    const pathToAnalyze = (targetPath || canonicalPath).trim();
+    const pathToAnalyze = (targetPath || canonicalPath).trim().replace(/^["']|["']$/g, '');
     if (!pathToAnalyze) {
       setError('Please specify a project folder first.');
       return;
@@ -232,7 +232,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       setAiAnalysis(result);
 
       // Auto-apply AI recommendations!
-      if (!name || name === canonicalPath.replace(/[\\/]$/, '').split(/[\\/]/).pop()) {
+      if (!name || name === pathToAnalyze.replace(/[\\/]$/, '').split(/[\\/]/).pop()) {
         setName(result.project_name);
       }
       if (result.dev_url && !devUrl) {
@@ -266,20 +266,40 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     try {
       const selected = await window.localhostApi.selectFolder();
       if (selected) {
-        setCanonicalPath(selected);
+        const clean = selected.trim().replace(/^["']|["']$/g, '');
+        setCanonicalPath(clean);
         // Automatically run detection on folder pick
-        await runDetection(selected, false);
+        await runDetection(clean, false);
         // And automatically trigger AI analysis for deep understanding
-        await handleRunAIAnalysis(selected);
+        await handleRunAIAnalysis(clean);
       }
     } catch (err: any) {
       setError(`Failed to select folder: ${err.message}`);
     }
   };
 
-  const handleManualPathBlur = () => {
-    if (canonicalPath.trim()) {
-      runDetection(canonicalPath.trim(), Boolean(editingProject));
+  const handleManualPathBlur = async () => {
+    const clean = canonicalPath.trim().replace(/^["']|["']$/g, '');
+    if (clean !== canonicalPath) {
+      setCanonicalPath(clean);
+    }
+    if (clean) {
+      await runDetection(clean, Boolean(editingProject));
+      if (!editingProject) {
+        await handleRunAIAnalysis(clean);
+      }
+    }
+  };
+
+  const handlePathPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData('text').trim().replace(/^["']|["']$/g, '');
+    if (pasted) {
+      e.preventDefault();
+      setCanonicalPath(pasted);
+      runDetection(pasted, Boolean(editingProject));
+      if (!editingProject) {
+        handleRunAIAnalysis(pasted);
+      }
     }
   };
 
@@ -460,6 +480,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 value={canonicalPath}
                 onChange={e => setCanonicalPath(e.target.value)}
                 onBlur={handleManualPathBlur}
+                onPaste={handlePathPaste}
                 placeholder="C:\Users\...\projects\my-app"
                 required
               />
@@ -496,6 +517,12 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 </>
               )}
             </div>
+            {isAnalyzingAI && (
+              <div className="alert-box alert-info animate-pulse mt-2 text-xs">
+                <Sparkles size={14} className="animate-spin text-cyan flex-shrink-0" />
+                <span>AI Assistant is reading project package.json and README to configure commands and preview URL...</span>
+              </div>
+            )}
             <span className="form-help">
               Pick your folder. Localhost safely checks top-level files or uses AI to configure scripts.
             </span>

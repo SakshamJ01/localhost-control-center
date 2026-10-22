@@ -2,6 +2,7 @@ import { LocalhostApi, Project, ProjectWithState, ProcessRun, OutputChunk, AppSe
 
 const STORAGE_KEY = 'localhost_browser_mock_projects';
 const AUDIT_KEY = 'localhost_browser_mock_audit';
+const SETTINGS_KEY = 'localhost_browser_mock_settings';
 
 export function setupMockApiIfNeeded(): void {
   if (typeof window === 'undefined' || window.localhostApi) {
@@ -66,6 +67,18 @@ export function setupMockApiIfNeeded(): void {
 
     readProjectContext: async (folderPath: string): Promise<ProjectContext | null> => {
       if (!folderPath) return null;
+
+      // 1. Try our Vite dev server Node.js filesystem API (when running in Vite browser mode)
+      try {
+        const resp = await fetch(`/api/dev/read-project-context?path=${encodeURIComponent(folderPath)}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && data.context) {
+            return data.context;
+          }
+        }
+      } catch {}
+
       const lower = folderPath.toLowerCase();
       const base = folderPath.replace(/[\\/]$/, '').split(/[\\/]/).pop() || 'My App';
 
@@ -149,6 +162,18 @@ export function setupMockApiIfNeeded(): void {
 
     detectProject: async (folderPath: string): Promise<ProjectDetection | null> => {
       if (!folderPath) return null;
+
+      // 1. Try our Vite dev server Node.js filesystem API (when running in Vite browser mode)
+      try {
+        const resp = await fetch(`/api/dev/detect-project?path=${encodeURIComponent(folderPath)}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && data.detection) {
+            return data.detection;
+          }
+        }
+      } catch {}
+
       const lower = folderPath.toLowerCase();
       const base = folderPath.replace(/[\\/]$/, '').split(/[\\/]/).pop() || 'My App';
 
@@ -413,25 +438,46 @@ export function setupMockApiIfNeeded(): void {
 
     getRunOutput: async (runId) => outputBuffers.get(runId) || [],
 
-    getSettings: async (): Promise<AppSettings> => ({
-      schema_version: 1,
-      log_retention_lines: 1000,
-      max_output_mb: 5,
-      terminate_children_on_exit: true,
-      confirm_before_run: true
-    }),
-
-    updateSettings: async (settings) => ({
-      success: true,
-      settings: {
+    getSettings: async (): Promise<AppSettings> => {
+      try {
+        const raw = localStorage.getItem(SETTINGS_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch {}
+      return {
         schema_version: 1,
         log_retention_lines: 1000,
         max_output_mb: 5,
         terminate_children_on_exit: true,
         confirm_before_run: true,
-        ...settings
+        ai_provider: 'openrouter',
+        ai_model: 'google/gemini-2.0-flash-exp:free'
+      };
+    },
+
+    updateSettings: async (settings): Promise<{ success: boolean; settings: AppSettings }> => {
+      let current: AppSettings = {
+        schema_version: 1,
+        log_retention_lines: 1000,
+        max_output_mb: 5,
+        terminate_children_on_exit: true,
+        confirm_before_run: true,
+        ai_provider: 'openrouter',
+        ai_model: 'google/gemini-2.0-flash-exp:free'
+      };
+      try {
+        const raw = localStorage.getItem(SETTINGS_KEY);
+        if (raw) {
+          try {
+            current = { ...current, ...JSON.parse(raw) };
+          } catch {}
+        }
+        const updated = { ...current, ...settings };
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+        return { success: true, settings: updated };
+      } catch {
+        return { success: false, settings: current };
       }
-    }),
+    },
 
     getAuditLog: async (): Promise<AuditEvent[]> => {
       try {
@@ -477,6 +523,7 @@ export function setupMockApiIfNeeded(): void {
     clearAllData: async () => {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(AUDIT_KEY);
+      localStorage.removeItem(SETTINGS_KEY);
       activeRuns.clear();
       outputBuffers.clear();
       return { success: true };

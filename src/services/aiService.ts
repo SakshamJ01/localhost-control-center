@@ -4,7 +4,7 @@ import { ProjectContext, AIAnalysisResult, AppSettings } from '../types';
  * Intelligent Local AI Analyzer fallback (zero-API-key heuristic engine)
  * Deeply parses package.json, README.md, and project structure without external API calls.
  */
-function localSmartAnalysis(context: ProjectContext): AIAnalysisResult {
+export function localSmartAnalysis(context: ProjectContext): AIAnalysisResult {
   let pkg: any = null;
   if (context.package_json) {
     try {
@@ -130,6 +130,129 @@ function localSmartAnalysis(context: ProjectContext): AIAnalysisResult {
 }
 
 /**
+ * Test AI provider connection and API key validity
+ */
+export async function testAIConnection(
+  provider: 'openrouter' | 'gemini' | 'openai',
+  apiKey: string,
+  model?: string
+): Promise<{ success: boolean; latencyMs: number; message: string; error?: string }> {
+  if (!apiKey.trim()) {
+    return { success: false, latencyMs: 0, message: 'Please enter an API key', error: 'Missing API key' };
+  }
+
+  const startTime = Date.now();
+  const testPrompt = 'Respond with JSON: {"status": "ok"}';
+
+  try {
+    if (provider === 'openrouter') {
+      const selectedModel = model?.trim() || 'google/gemini-2.0-flash-exp:free';
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey.trim()}`,
+          'HTTP-Referer': 'https://github.com/SakshamJ01/localhost-control-center',
+          'X-Title': 'Localhost Developer Control Center',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          messages: [{ role: 'user', content: testPrompt }],
+          max_tokens: 20
+        })
+      });
+
+      const latencyMs = Date.now() - startTime;
+      if (!response.ok) {
+        const errorText = await response.text();
+        let parsedMsg = errorText;
+        try {
+          const jsonErr = JSON.parse(errorText);
+          parsedMsg = jsonErr.error?.message || errorText;
+        } catch {}
+        return {
+          success: false,
+          latencyMs,
+          message: `OpenRouter error (${response.status})`,
+          error: parsedMsg
+        };
+      }
+
+      return {
+        success: true,
+        latencyMs,
+        message: `Successfully connected to OpenRouter using ${selectedModel}!`
+      };
+    } else if (provider === 'gemini') {
+      const selectedModel = model?.trim() || 'gemini-2.5-flash';
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey.trim()}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: testPrompt }] }]
+        })
+      });
+
+      const latencyMs = Date.now() - startTime;
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          success: false,
+          latencyMs,
+          message: `Gemini error (${response.status})`,
+          error: errorText
+        };
+      }
+
+      return {
+        success: true,
+        latencyMs,
+        message: `Successfully connected to Gemini API (${selectedModel})!`
+      };
+    } else {
+      const selectedModel = model?.trim() || 'gpt-4o-mini';
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          messages: [{ role: 'user', content: testPrompt }],
+          max_tokens: 20
+        })
+      });
+
+      const latencyMs = Date.now() - startTime;
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          success: false,
+          latencyMs,
+          message: `OpenAI error (${response.status})`,
+          error: errorText
+        };
+      }
+
+      return {
+        success: true,
+        latencyMs,
+        message: `Successfully connected to OpenAI (${selectedModel})!`
+      };
+    }
+  } catch (err: any) {
+    return {
+      success: false,
+      latencyMs: Date.now() - startTime,
+      message: 'Network error or blocked request',
+      error: err.message || String(err)
+    };
+  }
+}
+
+/**
  * Perform AI Project Analysis using OpenRouter, Gemini, OpenAI or smart local fallback
  */
 export async function analyzeProjectWithAI(
@@ -180,38 +303,66 @@ Respond with ONLY valid JSON with this exact schema:
     let rawResponseText = '';
 
     if (provider === 'openrouter') {
-      const model = settings?.ai_model || 'google/gemini-2.0-flash-001';
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': 'https://github.com/SakshamJ01/localhost-control-center',
-          'X-Title': 'Localhost Developer Control Center',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an expert developer assistant that analyzes local project codebases. You must return valid JSON only.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          response_format: { type: 'json_object' }
-        })
-      });
+      // Prefer specified model, or try standard models with automatic fallback
+      const modelsToTry = [
+        settings?.ai_model?.trim() || 'google/gemini-2.0-flash-exp:free',
+        'google/gemini-2.0-flash-exp:free',
+        'meta-llama/llama-3.3-70b-instruct:free',
+        'google/gemini-2.0-flash-001'
+      ];
+      // Filter duplicates
+      const uniqueModels = Array.from(new Set(modelsToTry.filter(Boolean)));
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+      let lastError = '';
+      let succeeded = false;
+
+      for (const model of uniqueModels) {
+        try {
+          const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'HTTP-Referer': 'https://github.com/SakshamJ01/localhost-control-center',
+              'X-Title': 'Localhost Developer Control Center',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are an expert developer assistant that analyzes local project codebases. You must return valid JSON only.'
+                },
+                {
+                  role: 'user',
+                  content: prompt
+                }
+              ],
+              response_format: { type: 'json_object' }
+            })
+          });
+
+          if (!response.ok) {
+            const errBody = await response.text();
+            lastError = `Model ${model} failed (${response.status}): ${errBody}`;
+            // If credit or model error, try next model
+            continue;
+          }
+
+          const data = await response.json();
+          rawResponseText = data.choices?.[0]?.message?.content || '';
+          if (rawResponseText) {
+            succeeded = true;
+            break;
+          }
+        } catch (fetchErr: any) {
+          lastError = fetchErr.message;
+        }
       }
 
-      const data = await response.json();
-      rawResponseText = data.choices?.[0]?.message?.content || '';
+      if (!succeeded) {
+        throw new Error(lastError || 'OpenRouter API request failed.');
+      }
     } else if (provider === 'gemini') {
       const model = settings?.ai_model || 'gemini-2.5-flash';
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -262,11 +413,11 @@ Respond with ONLY valid JSON with this exact schema:
     return parsed;
   } catch (err: any) {
     console.warn('[AIService] External AI call failed, falling back to local smart analyzer:', err);
-    // Graceful fallback to local smart analysis
+    // Graceful fallback to local smart analysis with clear explanation
     const fallback = localSmartAnalysis(context);
     fallback.warnings = [
       ...(fallback.warnings || []),
-      `AI analysis fallback (external API returned: ${err.message || 'error'}). Used smart local analysis.`
+      `AI Online Analysis note: ${err.message || 'API request issue'}. Generated configuration using local AST analyzer.`
     ];
     return fallback;
   }
