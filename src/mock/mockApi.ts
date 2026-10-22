@@ -1,4 +1,4 @@
-import { LocalhostApi, Project, ProjectWithState, ProcessRun, OutputChunk, AppSettings, AuditEvent, LaunchPreview, DetectedScript, ProjectDetection } from '../types';
+import { LocalhostApi, Project, ProjectWithState, ProcessRun, OutputChunk, AppSettings, AuditEvent, LaunchPreview, DetectedScript, ProjectDetection, ProjectContext } from '../types';
 
 const STORAGE_KEY = 'localhost_browser_mock_projects';
 const AUDIT_KEY = 'localhost_browser_mock_audit';
@@ -62,6 +62,89 @@ export function setupMockApiIfNeeded(): void {
         }
       }
       return null;
+    },
+
+    readProjectContext: async (folderPath: string): Promise<ProjectContext | null> => {
+      if (!folderPath) return null;
+      const lower = folderPath.toLowerCase();
+      const base = folderPath.replace(/[\\/]$/, '').split(/[\\/]/).pop() || 'My App';
+
+      const handle = (window as any).__lastSelectedDirHandle;
+      if (handle && handle.name) {
+        const files: string[] = [];
+        let pkgJson: string | undefined;
+        let readme: string | undefined;
+        let envExample: string | undefined;
+
+        try {
+          for await (const entry of handle.values()) {
+            files.push(entry.name);
+          }
+        } catch {}
+
+        try {
+          const f = await handle.getFileHandle('package.json');
+          const file = await f.getFile();
+          pkgJson = await file.text();
+        } catch {}
+
+        try {
+          const f = await handle.getFileHandle('README.md');
+          const file = await f.getFile();
+          readme = await file.text();
+        } catch {}
+
+        try {
+          const f = await handle.getFileHandle('.env.example');
+          const file = await f.getFile();
+          envExample = await file.text();
+        } catch {}
+
+        return {
+          folder_name: handle.name,
+          folder_path: folderPath,
+          files: files.slice(0, 60),
+          package_json: pkgJson,
+          readme: readme?.slice(0, 4000),
+          env_example: envExample?.slice(0, 2000)
+        };
+      }
+
+      if (lower.includes('brain dump') || lower.includes('clearstep')) {
+        return {
+          folder_name: 'brain dump',
+          folder_path: folderPath,
+          files: ['.next', 'data', 'node_modules', 'public', 'src', '.env.example', '.env.local', 'package.json', 'README.md', 'tsconfig.json'],
+          package_json: JSON.stringify({
+            name: "clearstep",
+            version: "0.1.0",
+            description: "Turn a brain dump into a small, editable plan that starts with one clear action.",
+            scripts: {
+              dev: "next dev",
+              build: "next build",
+              start: "next start",
+              typecheck: "tsc --noEmit",
+              lint: "eslint .",
+              test: "vitest run"
+            },
+            dependencies: {
+              next: "16.4.2",
+              react: "19.3.1",
+              "better-sqlite3": "^13.0.3",
+              zod: "^4.6.7"
+            }
+          }, null, 2),
+          readme: "# Clearstep\nTurn a brain dump into a small, editable plan that starts with one clear action.\n\n## Getting Started\nFirst, run the development server:\n```bash\nnpm run dev\n```\nOpen [http://localhost:3000](http://localhost:3000) with your browser.",
+          env_example: "DATABASE_PATH=./data/clearstep.db\nAPP_SECRET=your-secret-here"
+        };
+      }
+
+      return {
+        folder_name: base,
+        folder_path: folderPath,
+        files: ['package.json', 'src', 'public', 'README.md'],
+        package_json: (window as any).__lastSelectedPackageJson ? JSON.stringify((window as any).__lastSelectedPackageJson, null, 2) : undefined
+      };
     },
 
     detectProject: async (folderPath: string): Promise<ProjectDetection | null> => {

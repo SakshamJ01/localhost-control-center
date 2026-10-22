@@ -126,6 +126,58 @@ function setupIpc(): void {
     return detectProjectInFolder(folderPath);
   });
 
+  // 2c. Read project files context for AI analysis
+  ipcMain.handle('localhost:read-project-context', async (_event, folderPath: string) => {
+    if (!folderPath || !fs.existsSync(folderPath)) return null;
+    try {
+      const stat = fs.statSync(folderPath);
+      if (!stat.isDirectory()) return null;
+
+      const folderName = path.basename(folderPath);
+      const files = fs.readdirSync(folderPath).slice(0, 80);
+
+      let pkgJson: string | undefined;
+      const pkgPath = path.join(folderPath, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        try {
+          pkgJson = fs.readFileSync(pkgPath, 'utf8').slice(0, 10000);
+        } catch {}
+      }
+
+      let readme: string | undefined;
+      const readmeNames = ['README.md', 'readme.md', 'README', 'readme.markdown'];
+      for (const r of readmeNames) {
+        const rPath = path.join(folderPath, r);
+        if (fs.existsSync(rPath)) {
+          try {
+            readme = fs.readFileSync(rPath, 'utf8').slice(0, 6000);
+            break;
+          } catch {}
+        }
+      }
+
+      let envExample: string | undefined;
+      const envPath = path.join(folderPath, '.env.example');
+      if (fs.existsSync(envPath)) {
+        try {
+          envExample = fs.readFileSync(envPath, 'utf8').slice(0, 3000);
+        } catch {}
+      }
+
+      return {
+        folder_name: folderName,
+        folder_path: folderPath,
+        files,
+        package_json: pkgJson,
+        readme,
+        env_example: envExample
+      };
+    } catch (err) {
+      console.error('[IPC] read-project-context error:', err);
+      return null;
+    }
+  });
+
   // 3. List projects with active run state & path validation
   ipcMain.handle('localhost:list-projects', async (): Promise<ProjectWithState[]> => {
     const rawProjects = store.getProjects();

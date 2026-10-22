@@ -11,7 +11,11 @@ import {
   Check, 
   AlertTriangle, 
   X, 
-  Folder
+  Folder,
+  Sparkles,
+  Key,
+  ExternalLink,
+  Bot
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -25,7 +29,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   onReloadProjects
 }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'export-import' | 'audit'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'ai' | 'export-import' | 'audit'>('general');
   const [dataDir, setDataDir] = useState<string>('');
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
@@ -33,10 +37,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isResetting, setIsResetting] = useState(false);
 
+  // AI Settings State
+  const [aiProvider, setAiProvider] = useState<'openrouter' | 'gemini' | 'openai'>('openrouter');
+  const [aiApiKey, setAiApiKey] = useState('');
+  const [aiModel, setAiModel] = useState('google/gemini-2.0-flash-001');
+
   useEffect(() => {
     if (isOpen) {
       window.localhostApi.getDataDir().then(setDataDir);
-      window.localhostApi.getSettings().then(setSettings);
+      window.localhostApi.getSettings().then(s => {
+        setSettings(s);
+        if (s.ai_provider) setAiProvider(s.ai_provider);
+        if (s.ai_api_key) setAiApiKey(s.ai_api_key);
+        if (s.ai_model) setAiModel(s.ai_model);
+      });
       window.localhostApi.getAuditLog().then(setAuditEvents);
       setStatusMessage(null);
     }
@@ -51,6 +65,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (res.success) {
       setSettings(res.settings);
       setStatusMessage({ type: 'success', text: 'Shutdown preference updated.' });
+    }
+  };
+
+  const handleSaveAISettings = async () => {
+    try {
+      const res = await window.localhostApi.updateSettings({
+        ai_provider: aiProvider,
+        ai_api_key: aiApiKey.trim(),
+        ai_model: aiModel.trim()
+      });
+      if (res.success) {
+        setSettings(res.settings);
+        setStatusMessage({ type: 'success', text: 'AI assistant configuration saved successfully!' });
+      }
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: `Failed to save: ${err.message}` });
     }
   };
 
@@ -146,6 +176,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <span>Preferences & Storage</span>
           </button>
           <button
+            className={`tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ai')}
+          >
+            <Sparkles size={15} className="text-cyan" />
+            <span>AI Assistant</span>
+          </button>
+          <button
             className={`tab-btn ${activeTab === 'export-import' ? 'active' : ''}`}
             onClick={() => setActiveTab('export-import')}
           >
@@ -221,7 +258,112 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         )}
 
-        {/* Tab 2: Export & Import */}
+        {/* Tab 2: AI Assistant */}
+        {activeTab === 'ai' && (
+          <div className="settings-tab-content">
+            <div className="settings-section">
+              <h3 className="section-heading flex-row gap-2">
+                <Bot size={18} className="text-cyan" />
+                AI Project Analyzer & Setup Assistant
+              </h3>
+              <p className="section-subtext">
+                Configure your API key to let Localhost inspect project codebases, read READMEs, diagnose prerequisites, and automatically suggest the exact development command and URL.
+              </p>
+
+              <div className="form-group mt-3">
+                <label className="form-label" htmlFor="ai-provider">
+                  AI Provider
+                </label>
+                <select
+                  id="ai-provider"
+                  className="form-select"
+                  value={aiProvider}
+                  onChange={e => {
+                    const prov = e.target.value as any;
+                    setAiProvider(prov);
+                    if (prov === 'openrouter') setAiModel('google/gemini-2.0-flash-001');
+                    else if (prov === 'gemini') setAiModel('gemini-2.5-flash');
+                    else setAiModel('gpt-4o-mini');
+                  }}
+                >
+                  <option value="openrouter">OpenRouter (Recommended — 200+ Models)</option>
+                  <option value="gemini">Google Gemini API</option>
+                  <option value="openai">OpenAI API</option>
+                </select>
+              </div>
+
+              <div className="form-group mt-3">
+                <div className="flex-row justify-between items-center">
+                  <label className="form-label" htmlFor="ai-key">
+                    API Key
+                  </label>
+                  {aiProvider === 'openrouter' && (
+                    <a
+                      href="https://openrouter.ai/keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-cyan flex-row items-center gap-1 hover:underline"
+                    >
+                      <span>Get OpenRouter API Key</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  )}
+                  {aiProvider === 'gemini' && (
+                    <a
+                      href="https://aistudio.google.com/app/apikey"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-cyan flex-row items-center gap-1 hover:underline"
+                    >
+                      <span>Get Gemini API Key</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  )}
+                </div>
+                <div className="input-with-icon">
+                  <Key size={16} className="input-icon" />
+                  <input
+                    id="ai-key"
+                    type="password"
+                    className="form-input with-left-icon font-mono text-xs"
+                    value={aiApiKey}
+                    onChange={e => setAiApiKey(e.target.value)}
+                    placeholder={aiProvider === 'openrouter' ? 'sk-or-v1-...' : 'Paste your API key here'}
+                  />
+                </div>
+                <span className="form-help">
+                  Keys are stored exclusively in your local machine's settings file. Never transmitted elsewhere.
+                </span>
+              </div>
+
+              <div className="form-group mt-3">
+                <label className="form-label" htmlFor="ai-model">
+                  Model Identifier
+                </label>
+                <input
+                  id="ai-model"
+                  type="text"
+                  className="form-input font-mono text-sm"
+                  value={aiModel}
+                  onChange={e => setAiModel(e.target.value)}
+                  placeholder="e.g. google/gemini-2.0-flash-001, anthropic/claude-3.5-sonnet"
+                />
+                <span className="form-help">
+                  Models like Gemini 2.0 Flash or Claude 3.5 Sonnet provide instant, deep project analysis.
+                </span>
+              </div>
+
+              <div className="mt-4 flex-row gap-2">
+                <button className="btn-primary" onClick={handleSaveAISettings}>
+                  <Check size={16} />
+                  <span>Save AI Configuration</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Export & Import */}
         {activeTab === 'export-import' && (
           <div className="settings-tab-content">
             <div className="settings-section">

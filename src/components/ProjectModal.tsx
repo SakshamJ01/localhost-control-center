@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ProjectWithState, ProjectDetection, DetectedScript } from '../types';
+import { ProjectWithState, ProjectDetection, DetectedScript, AIAnalysisResult } from '../types';
+import { analyzeProjectWithAI } from '../services/aiService';
 import { isValidHttpUrl } from '../utils/formatters';
 import { 
   FolderOpen, 
@@ -13,7 +14,8 @@ import {
   Info,
   Sparkles,
   SlidersHorizontal,
-  RefreshCw
+  RefreshCw,
+  Bot
 } from 'lucide-react';
 
 interface ProjectModalProps {
@@ -48,6 +50,10 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   const [selectedScriptId, setSelectedScriptId] = useState<string>('custom');
   const [isDetecting, setIsDetecting] = useState(false);
 
+  // AI Analysis state
+  const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResult | null>(null);
+  const [isAnalyzingAI, setIsAnalyzingAI] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -66,6 +72,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       setIsShellMode(editingProject.is_shell_mode || false);
       setCommandDisabled(editingProject.command_disabled || false);
       setSelectedScriptId('custom');
+      setAiAnalysis(null);
 
       // Try detecting project in background to populate available scripts
       if (editingProject.canonical_path) {
@@ -85,6 +92,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       setDetection(null);
       setDetectedScripts([]);
       setSelectedScriptId('custom');
+      setAiAnalysis(null);
     }
     setError(null);
   }, [editingProject, isOpen]);
@@ -204,6 +212,56 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     }
   };
 
+  // Run deep AI codebase and architecture analysis
+  const handleRunAIAnalysis = async (targetPath?: string) => {
+    const pathToAnalyze = (targetPath || canonicalPath).trim();
+    if (!pathToAnalyze) {
+      setError('Please specify a project folder first.');
+      return;
+    }
+    setIsAnalyzingAI(true);
+    setError(null);
+    try {
+      const context = await window.localhostApi.readProjectContext(pathToAnalyze);
+      if (!context) {
+        setError('Could not access folder files for AI analysis.');
+        return;
+      }
+      const settings = await window.localhostApi.getSettings();
+      const result = await analyzeProjectWithAI(context, settings);
+      setAiAnalysis(result);
+
+      // Auto-apply AI recommendations!
+      if (!name || name === canonicalPath.replace(/[\\/]$/, '').split(/[\\/]/).pop()) {
+        setName(result.project_name);
+      }
+      if (result.dev_url && !devUrl) {
+        setDevUrl(result.dev_url);
+      }
+      if (result.tags.length > 0 && !tagsString) {
+        setTagsString(result.tags.join(', '));
+      }
+
+      setExecutable(result.executable);
+      setArgsString(result.args.join(' '));
+      setCustomCommandLine(result.recommended_command);
+      setCommandDisabled(false);
+
+      // Check if recommended command matches any detected script
+      const match = detectedScripts.find(s => s.full_command.toLowerCase() === result.recommended_command.toLowerCase());
+      if (match) {
+        setSelectedScriptId(match.id);
+      } else {
+        setSelectedScriptId('custom');
+      }
+    } catch (err: any) {
+      console.warn('AI analysis error:', err);
+      setError(`AI analysis error: ${err.message || err}`);
+    } finally {
+      setIsAnalyzingAI(false);
+    }
+  };
+
   const handleBrowseFolder = async () => {
     try {
       const selected = await window.localhostApi.selectFolder();
@@ -211,6 +269,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         setCanonicalPath(selected);
         // Automatically run detection on folder pick
         await runDetection(selected, false);
+        // And automatically trigger AI analysis for deep understanding
+        await handleRunAIAnalysis(selected);
       }
     } catch (err: any) {
       setError(`Failed to select folder: ${err.message}`);
@@ -413,21 +473,79 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 <span>Browse...</span>
               </button>
               {canonicalPath.trim() && (
-                <button
-                  type="button"
-                  className="btn-secondary-action"
-                  onClick={() => runDetection(canonicalPath.trim(), false)}
-                  title="Re-run Auto-Detection"
-                  disabled={isDetecting}
-                >
-                  <RefreshCw size={14} className={isDetecting ? 'animate-spin' : ''} />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="btn-ai-analyze"
+                    onClick={() => handleRunAIAnalysis()}
+                    disabled={isAnalyzingAI}
+                    title="Deep AI Codebase & Launch Analysis"
+                  >
+                    <Sparkles size={14} className={isAnalyzingAI ? 'animate-spin' : ''} />
+                    <span>{isAnalyzingAI ? 'Analyzing...' : 'AI Analyze'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary-action"
+                    onClick={() => runDetection(canonicalPath.trim(), false)}
+                    title="Re-run Quick Detection"
+                    disabled={isDetecting}
+                  >
+                    <RefreshCw size={14} className={isDetecting ? 'animate-spin' : ''} />
+                  </button>
+                </>
               )}
             </div>
             <span className="form-help">
-              Pick your folder. Localhost safely checks top-level files to auto-configure scripts.
+              Pick your folder. Localhost safely checks top-level files or uses AI to configure scripts.
             </span>
           </div>
+
+          {/* AI Project Intelligence Card */}
+          {aiAnalysis && (
+            <div className="ai-analysis-card animate-fade-in">
+              <div className="ai-card-header">
+                <div className="ai-card-title-row">
+                  <Bot size={18} className="text-cyan animate-pulse" />
+                  <span className="ai-badge">AI ARCHITECT</span>
+                  <strong className="ai-project-title">{aiAnalysis.framework}</strong>
+                </div>
+                <span className="ai-tag">⚡ {aiAnalysis.recommended_command}</span>
+              </div>
+
+              <p className="ai-summary-text">{aiAnalysis.summary}</p>
+
+              <div className="ai-explanation-box">
+                <Info size={14} className="text-cyan flex-shrink-0" />
+                <span>{aiAnalysis.command_explanation}</span>
+              </div>
+
+              {aiAnalysis.prerequisites && aiAnalysis.prerequisites.length > 0 && (
+                <div className="ai-prereqs-list">
+                  <span className="prereq-title">Setup Diagnostics:</span>
+                  <ul>
+                    {aiAnalysis.prerequisites.map((p, idx) => (
+                      <li key={idx}>
+                        <Check size={12} className="text-emerald flex-shrink-0" />
+                        <span>{p}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {aiAnalysis.warnings && aiAnalysis.warnings.length > 0 && (
+                <div className="ai-warnings-list">
+                  {aiAnalysis.warnings.map((w, idx) => (
+                    <div key={idx} className="ai-warning-item">
+                      <AlertTriangle size={13} className="text-amber flex-shrink-0" />
+                      <span>{w}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Project Display Name */}
           <div className="form-group">

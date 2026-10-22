@@ -47,6 +47,32 @@ export interface AppSettings {
   max_output_mb: number;
   terminate_children_on_exit: boolean;
   confirm_before_run: boolean;
+  ai_provider?: 'openrouter' | 'gemini' | 'openai';
+  ai_api_key?: string;
+  ai_model?: string;
+}
+
+export interface ProjectContext {
+  folder_name: string;
+  folder_path: string;
+  files: string[];
+  package_json?: string;
+  readme?: string;
+  env_example?: string;
+}
+
+export interface AIAnalysisResult {
+  project_name: string;
+  framework: string;
+  summary: string;
+  recommended_command: string;
+  command_explanation: string;
+  dev_url: string | null;
+  prerequisites: string[];
+  tags: string[];
+  executable: string;
+  args: string[];
+  warnings?: string[];
 }
 
 export interface AuditEvent {
@@ -105,6 +131,7 @@ export interface LocalhostApi {
   getDataDir: () => Promise<string>;
   selectFolder: () => Promise<string | null>;
   detectProject: (folderPath: string) => Promise<ProjectDetection | null>;
+  readProjectContext: (folderPath: string) => Promise<ProjectContext | null>;
   listProjects: () => Promise<ProjectWithState[]>;
   addProject: (data: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'archived_at'>) => Promise<{ success: boolean; project?: Project; error?: string }>;
   updateProject: (id: string, data: Partial<Project>) => Promise<{ success: boolean; project?: Project; error?: string }>;
