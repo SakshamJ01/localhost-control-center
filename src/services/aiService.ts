@@ -130,6 +130,33 @@ export function localSmartAnalysis(context: ProjectContext): AIAnalysisResult {
 }
 
 /**
+ * Safe AI Fetch helper
+ * Tries direct browser fetch first; if blocked by CSP, extensions, or ad-blockers,
+ * it falls back through the local dev server proxy at /api/dev/ai-chat.
+ */
+async function safeAiFetch(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err: any) {
+    if (typeof window !== 'undefined') {
+      try {
+        const proxyResp = await fetch('/api/dev/ai-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url,
+            headers: init.headers,
+            body: init.body
+          })
+        });
+        return proxyResp;
+      } catch {}
+    }
+    throw err;
+  }
+}
+
+/**
  * Test AI provider connection and API key validity
  */
 export async function testAIConnection(
@@ -147,7 +174,7 @@ export async function testAIConnection(
   try {
     if (provider === 'openrouter') {
       const selectedModel = model?.trim() || 'google/gemini-2.0-flash-exp:free';
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const response = await safeAiFetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey.trim()}`,
@@ -186,7 +213,7 @@ export async function testAIConnection(
     } else if (provider === 'gemini') {
       const selectedModel = model?.trim() || 'gemini-2.5-flash';
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey.trim()}`;
-      const response = await fetch(url, {
+      const response = await safeAiFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -212,7 +239,7 @@ export async function testAIConnection(
       };
     } else {
       const selectedModel = model?.trim() || 'gpt-4o-mini';
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await safeAiFetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey.trim()}`,
@@ -318,7 +345,7 @@ Respond with ONLY valid JSON with this exact schema:
 
       for (const model of uniqueModels) {
         try {
-          const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          const response = await safeAiFetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${apiKey}`,
@@ -366,7 +393,7 @@ Respond with ONLY valid JSON with this exact schema:
     } else if (provider === 'gemini') {
       const model = settings?.ai_model || 'gemini-2.5-flash';
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-      const response = await fetch(url, {
+      const response = await safeAiFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -385,7 +412,7 @@ Respond with ONLY valid JSON with this exact schema:
     } else {
       // OpenAI compatible
       const model = settings?.ai_model || 'gpt-4o-mini';
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await safeAiFetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,

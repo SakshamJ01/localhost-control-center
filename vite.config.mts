@@ -173,6 +173,33 @@ function localhostDevApiPlugin(): Plugin {
           return;
         }
 
+        // 3. AI Proxy for browser dev preview (bypasses browser adblocker & CORS restrictions)
+        if (parsedUrl.pathname === '/api/dev/ai-chat' && req.method === 'POST') {
+          let bodyStr = '';
+          req.on('data', chunk => { bodyStr += chunk; });
+          req.on('end', async () => {
+            res.setHeader('Content-Type', 'application/json');
+            try {
+              const payload = JSON.parse(bodyStr);
+              const { url, headers, body } = payload;
+
+              const fetchResp = await fetch(url, {
+                method: 'POST',
+                headers: headers || {},
+                body: typeof body === 'string' ? body : JSON.stringify(body)
+              });
+
+              const respText = await fetchResp.text();
+              res.statusCode = fetchResp.status;
+              res.end(respText);
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: { message: err.message || 'Dev AI proxy failed' } }));
+            }
+          });
+          return;
+        }
+
         next();
       });
     }
