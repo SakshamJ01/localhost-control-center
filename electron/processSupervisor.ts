@@ -96,13 +96,29 @@ export class ProcessSupervisor {
     };
 
     try {
-      // Spawn non-elevated child process
-      // If is_shell_mode is enabled, shell: true is passed with platform shell
+      // On Windows, commands like npm, npx, yarn, pnpm are .cmd batch scripts
+      // that require shell: true in Node.js, otherwise spawn throws ENOENT / EINVAL.
+      const isWindows = process.platform === 'win32';
+      const execLower = cleanExec.toLowerCase();
+      const isBatchCommand = isWindows && (
+        ['npm', 'npx', 'yarn', 'pnpm', 'corepack'].includes(execLower) ||
+        execLower.endsWith('.cmd') ||
+        execLower.endsWith('.bat')
+      );
+      const useShell = project.is_shell_mode === true || isBatchCommand;
+
       const child = spawn(cleanExec, cleanArgs, {
         cwd: workingDir,
         env: { ...process.env },
-        shell: project.is_shell_mode === true,
+        shell: useShell,
         windowsHide: true
+      });
+
+      // IMPORTANT: Register error handler immediately to prevent uncaught error events
+      child.on('error', (err: Error) => {
+        console.error(`[ProcessSupervisor] Process error on run ${runId}:`, err);
+        this.appendOutput(runId, `\n[System Error] ${err.message}\n`, 'system');
+        this.finalizeRun(runId, 'failed_to_start', null, err.message);
       });
 
       if (!child.pid) {
@@ -131,7 +147,7 @@ export class ProcessSupervisor {
       this.emitStatusChange(runRecord);
 
       // Add system announcement banner to log
-      this.appendOutput(runId, `--- Process started at ${runRecord.started_at} (PID: ${child.pid}) ---\nCommand: ${commandPreview}\nWorking Dir: ${workingDir}\nShell Mode: ${project.is_shell_mode ? 'Enabled' : 'Direct execution'}\n----------------------------------------------------\n`, 'system');
+      this.appendOutput(runId, `--- Process started at ${runRecord.started_at} (PID: ${child.pid}) ---\nCommand: ${commandPreview}\nWorking Dir: ${workingDir}\nShell Mode: ${useShell ? 'Enabled' : 'Direct execution'}\n----------------------------------------------------\n`, 'system');
 
       // Setup stdout/stderr handlers
       if (child.stdout) {
@@ -145,12 +161,6 @@ export class ProcessSupervisor {
           this.appendOutput(runId, data.toString('utf-8'), 'stderr');
         });
       }
-
-      child.on('error', (err: Error) => {
-        console.error(`[ProcessSupervisor] Process error on run ${runId}:`, err);
-        this.appendOutput(runId, `\n[System Error] ${err.message}\n`, 'system');
-        this.finalizeRun(runId, 'failed_to_start', null, err.message);
-      });
 
       child.on('close', (code: number | null) => {
         this.appendOutput(runId, `\n--- Process exited with code ${code ?? 'unknown'} at ${new Date().toISOString()} ---\n`, 'system');

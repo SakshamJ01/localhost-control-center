@@ -9,6 +9,14 @@ let mainWindow: BrowserWindow | null = null;
 let store: Store;
 let supervisor: ProcessSupervisor;
 
+process.on('uncaughtException', (error) => {
+  console.error('[Electron Main] Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Electron Main] Unhandled Rejection:', reason);
+});
+
 function isValidHttpUrl(stringUrl: string): boolean {
   try {
     const parsed = new URL(stringUrl);
