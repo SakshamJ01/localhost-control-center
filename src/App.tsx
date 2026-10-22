@@ -17,7 +17,6 @@ import {
   AlertTriangle, 
   ShieldCheck, 
   Activity, 
-  Sparkles,
   X
 } from 'lucide-react';
 
@@ -245,22 +244,6 @@ export const App: React.FC = () => {
     } catch (err: any) {
       showToast(err.message, 'error');
     }
-  };
-
-  // Helper to add sample project on empty state
-  const handleAddSampleProject = async () => {
-    const sample = {
-      name: 'Localhost Self-Workspace',
-      canonical_path: 'C:\\Users\\Saksham\\Documents\\Localhost — Developer Control Center',
-      dev_url: 'http://localhost:5173',
-      executable: 'npm',
-      args: ['run', 'dev'],
-      working_directory: null,
-      tags: ['desktop', 'electron', 'vite'],
-      is_shell_mode: false,
-      command_disabled: false
-    };
-    await handleSaveProject(sample);
   };
 
   // Extract all unique tags
@@ -519,14 +502,6 @@ export const App: React.FC = () => {
               >
                 <Plus size={18} />
                 <span>Add Your First Project</span>
-              </button>
-
-              <button
-                className="btn-secondary btn-lg"
-                onClick={handleAddSampleProject}
-              >
-                <Sparkles size={18} className="text-cyan" />
-                <span>Add Current Project as Sample</span>
               </button>
             </div>
           </div>

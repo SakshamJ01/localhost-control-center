@@ -1,69 +1,27 @@
 import { LocalhostApi, Project, ProjectWithState, ProcessRun, OutputChunk, AppSettings, AuditEvent, LaunchPreview } from '../types';
 
 const STORAGE_KEY = 'localhost_browser_mock_projects';
-
-const INITIAL_PROJECTS: Project[] = [
-  {
-    id: 'proj_sample_nextjs',
-    name: 'E-Commerce Storefront',
-    canonical_path: 'C:\\Users\\Developer\\Projects\\storefront-web',
-    dev_url: 'http://localhost:3000',
-    executable: 'npm',
-    args: ['run', 'dev'],
-    working_directory: null,
-    tags: ['frontend', 'nextjs', 'typescript'],
-    is_shell_mode: false,
-    command_disabled: false,
-    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    updated_at: new Date().toISOString(),
-    archived_at: null
-  },
-  {
-    id: 'proj_sample_fastapi',
-    name: 'Inventory & Auth API',
-    canonical_path: 'C:\\Users\\Developer\\Projects\\inventory-api',
-    dev_url: 'http://localhost:8000/docs',
-    executable: 'python',
-    args: ['-m', 'uvicorn', 'main:app', '--reload', '--port', '8000'],
-    working_directory: null,
-    tags: ['backend', 'python', 'fastapi'],
-    is_shell_mode: false,
-    command_disabled: false,
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updated_at: new Date().toISOString(),
-    archived_at: null
-  },
-  {
-    id: 'proj_sample_docs',
-    name: 'Developer Documentation Portal',
-    canonical_path: 'C:\\Users\\Developer\\Projects\\docs-portal',
-    dev_url: 'http://localhost:4000',
-    executable: 'npm',
-    args: ['run', 'docs:serve'],
-    working_directory: null,
-    tags: ['docs', 'astro'],
-    is_shell_mode: false,
-    command_disabled: true, // Example imported project with command disabled for security review
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    updated_at: new Date().toISOString(),
-    archived_at: null
-  }
-];
+const AUDIT_KEY = 'localhost_browser_mock_audit';
 
 export function setupMockApiIfNeeded(): void {
   if (typeof window === 'undefined' || window.localhostApi) {
     return;
   }
 
-  console.log('[MockApi] Electron preload not detected. Initializing browser mock layer for Localhost Developer Control Center.');
-
   const loadProjects = (): Project[] => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed: Project[] = JSON.parse(raw);
+        // Automatically purge any dummy test projects from older sessions
+        const cleaned = parsed.filter(p => !p.id.startsWith('proj_sample_'));
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+        }
+        return cleaned;
+      }
     } catch {}
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PROJECTS));
-    return INITIAL_PROJECTS;
+    return [];
   };
 
   const saveProjects = (projects: Project[]) => {
@@ -80,15 +38,15 @@ export function setupMockApiIfNeeded(): void {
     getDataDir: async () => 'C:\\Users\\Developer\\AppData\\Roaming\\Localhost',
 
     selectFolder: async () => {
-      const randomId = Math.floor(Math.random() * 900 + 100);
-      return `C:\\Users\\Developer\\Projects\\sample-app-${randomId}`;
+      const folderName = prompt('Enter folder path for project:') || 'C:\\Projects\\my-new-app';
+      return folderName;
     },
 
     listProjects: async (): Promise<ProjectWithState[]> => {
       const projs = loadProjects();
       return projs.map(p => ({
         ...p,
-        path_exists: !p.canonical_path.includes('missing'),
+        path_exists: true,
         active_run: activeRuns.get(p.id) || null
       }));
     },
@@ -135,7 +93,7 @@ export function setupMockApiIfNeeded(): void {
     openFolder: async (id) => {
       const projs = loadProjects();
       const p = projs.find(x => x.id === id);
-      console.log(`[MockApi] Opening folder: ${p?.canonical_path}`);
+      console.log(`[Browser Mock] Opening folder: ${p?.canonical_path}`);
       return { success: true };
     },
 
@@ -193,39 +151,10 @@ export function setupMockApiIfNeeded(): void {
           text: `[Localhost] Spawning app-owned child PID ${pid}\nCommand: ${cmdPreview}\nWorking Dir: ${run.working_directory}\n----------------------------------------\n`,
           stream: 'system',
           timestamp: new Date().toISOString()
-        },
-        {
-          runId,
-          text: `[info] Service starting up on port...\n[info] Ready in 450ms.\n`,
-          stream: 'stdout',
-          timestamp: new Date().toISOString()
         }
       ]);
 
-      // Simulate periodic log ticks
-      let tick = 0;
-      const interval = setInterval(() => {
-        tick++;
-        const sampleLogs = [
-          `[GET] /api/health - 200 OK (2ms)\n`,
-          `[GET] /assets/index.js - 304 Not Modified\n`,
-          `[WS] Client connection established from 127.0.0.1:54322\n`,
-          `[debug] Memory usage: 48.2 MB heap\n`
-        ];
-        const logText = sampleLogs[tick % sampleLogs.length];
-        const chunk: OutputChunk = {
-          runId,
-          text: logText,
-          stream: 'stdout',
-          timestamp: new Date().toISOString()
-        };
-        outputBuffers.get(runId)?.push(chunk);
-        outputListeners.forEach(cb => cb(chunk));
-      }, 3000);
-
-      activeIntervals.set(runId, interval);
       statusListeners.forEach(cb => cb(run));
-
       return { success: true, runId };
     },
 
@@ -287,24 +216,13 @@ export function setupMockApiIfNeeded(): void {
       }
     }),
 
-    getAuditLog: async (): Promise<AuditEvent[]> => [
-      {
-        id: 'evt_1',
-        event_type: 'project_added',
-        project_id: 'proj_sample_nextjs',
-        project_name: 'E-Commerce Storefront',
-        timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
-        details: 'Registered project "E-Commerce Storefront"'
-      },
-      {
-        id: 'evt_2',
-        event_type: 'config_imported',
-        project_id: null,
-        project_name: null,
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-        details: 'Imported docs-portal. Command marked disabled for security review.'
-      }
-    ],
+    getAuditLog: async (): Promise<AuditEvent[]> => {
+      try {
+        const raw = localStorage.getItem(AUDIT_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch {}
+      return [];
+    },
 
     exportConfig: async () => {
       const projs = loadProjects();
@@ -341,6 +259,7 @@ export function setupMockApiIfNeeded(): void {
 
     clearAllData: async () => {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(AUDIT_KEY);
       activeRuns.clear();
       outputBuffers.clear();
       return { success: true };
