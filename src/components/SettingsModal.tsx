@@ -12,11 +12,11 @@ import {
   Check, 
   AlertTriangle, 
   X, 
-  Folder,
-  Sparkles,
-  Key,
-  ExternalLink,
-  Bot,
+  Folder, 
+  Sparkles, 
+  Key, 
+  ExternalLink, 
+  Bot, 
   Wifi
 } from 'lucide-react';
 

@@ -425,8 +425,8 @@ export const App: React.FC = () => {
               </button>
             )}
             {allTags
-              .filter(t => t !== selectedTag)
-              .map(tag => (
+              .filter((t: string) => t !== selectedTag)
+              .map((tag: string) => (
                 <button
                   key={tag}
                   className="tag-filter-chip"
@@ -446,7 +446,7 @@ export const App: React.FC = () => {
           </div>
         ) : filteredProjects.length > 0 ? (
           <div className="projects-grid">
-            {filteredProjects.map(project => (
+            {filteredProjects.map((project: ProjectWithState) => (
               <ProjectCard
                 key={project.id}
                 project={project}

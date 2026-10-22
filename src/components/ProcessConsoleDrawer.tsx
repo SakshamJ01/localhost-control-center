@@ -11,7 +11,7 @@ import {
   Search, 
   ArrowDown, 
   X, 
-  Clock,
+  Clock, 
   Cpu
 } from 'lucide-react';
 

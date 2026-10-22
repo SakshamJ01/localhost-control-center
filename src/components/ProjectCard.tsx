@@ -14,8 +14,8 @@ import {
   ExternalLink, 
   Copy, 
   Check, 
-  ShieldAlert,
-  Clock,
+  ShieldAlert, 
+  Clock, 
   Cpu
 } from 'lucide-react';
 

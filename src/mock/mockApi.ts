@@ -79,7 +79,6 @@ export function setupMockApiIfNeeded(): void {
         }
       } catch {}
 
-      const lower = folderPath.toLowerCase();
       const base = folderPath.replace(/[\\/]$/, '').split(/[\\/]/).pop() || 'My App';
 
       const handle = (window as any).__lastSelectedDirHandle;
@@ -120,35 +119,6 @@ export function setupMockApiIfNeeded(): void {
           package_json: pkgJson,
           readme: readme?.slice(0, 4000),
           env_example: envExample?.slice(0, 2000)
-        };
-      }
-
-      if (lower.includes('brain dump') || lower.includes('clearstep')) {
-        return {
-          folder_name: 'brain dump',
-          folder_path: folderPath,
-          files: ['.next', 'data', 'node_modules', 'public', 'src', '.env.example', '.env.local', 'package.json', 'README.md', 'tsconfig.json'],
-          package_json: JSON.stringify({
-            name: "clearstep",
-            version: "0.1.0",
-            description: "Turn a brain dump into a small, editable plan that starts with one clear action.",
-            scripts: {
-              dev: "next dev",
-              build: "next build",
-              start: "next start",
-              typecheck: "tsc --noEmit",
-              lint: "eslint .",
-              test: "vitest run"
-            },
-            dependencies: {
-              next: "16.4.2",
-              react: "19.3.1",
-              "better-sqlite3": "^13.0.3",
-              zod: "^4.6.7"
-            }
-          }, null, 2),
-          readme: "# Clearstep\nTurn a brain dump into a small, editable plan that starts with one clear action.\n\n## Getting Started\nFirst, run the development server:\n```bash\nnpm run dev\n```\nOpen [http://localhost:3000](http://localhost:3000) with your browser.",
-          env_example: "DATABASE_PATH=./data/clearstep.db\nAPP_SECRET=your-secret-here"
         };
       }
 
@@ -234,19 +204,18 @@ export function setupMockApiIfNeeded(): void {
         };
       }
 
-      if (lower.includes('brain dump') || lower.includes('clearstep') || lower.includes('next')) {
+      if (lower.includes('next')) {
         return {
           framework: 'Next.js App',
           project_type: 'node' as const,
-          suggested_name: 'clearstep',
+          suggested_name: base,
           suggested_dev_url: 'http://localhost:3000',
-          suggested_tags: ['nextjs', 'react', 'typescript'],
+          suggested_tags: ['nextjs', 'react'],
           package_manager: 'npm' as const,
           available_scripts: [
             { id: 'script_dev', name: 'dev', command: 'next dev', executable: 'npm', args: ['run', 'dev'], full_command: 'npm run dev', is_recommended: true },
             { id: 'script_build', name: 'build', command: 'next build', executable: 'npm', args: ['run', 'build'], full_command: 'npm run build', is_recommended: false },
-            { id: 'script_start', name: 'start', command: 'next start', executable: 'npm', args: ['start'], full_command: 'npm start', is_recommended: false },
-            { id: 'script_test', name: 'test', command: 'vitest run', executable: 'npm', args: ['test'], full_command: 'npm test', is_recommended: false }
+            { id: 'script_start', name: 'start', command: 'next start', executable: 'npm', args: ['start'], full_command: 'npm start', is_recommended: false }
           ],
           recommended_script: { id: 'script_dev', name: 'dev', command: 'next dev', executable: 'npm', args: ['run', 'dev'], full_command: 'npm run dev', is_recommended: true }
         };
