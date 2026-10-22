@@ -1,4 +1,4 @@
-import { LocalhostApi, Project, ProjectWithState, ProcessRun, OutputChunk, AppSettings, AuditEvent, LaunchPreview } from '../types';
+import { LocalhostApi, Project, ProjectWithState, ProcessRun, OutputChunk, AppSettings, AuditEvent, LaunchPreview, DetectedScript, ProjectDetection } from '../types';
 
 const STORAGE_KEY = 'localhost_browser_mock_projects';
 const AUDIT_KEY = 'localhost_browser_mock_audit';
@@ -38,14 +38,93 @@ export function setupMockApiIfNeeded(): void {
     getDataDir: async () => 'C:\\Users\\Developer\\AppData\\Roaming\\Localhost',
 
     selectFolder: async () => {
-      const folderName = prompt('Enter folder path for project:') || 'C:\\Projects\\my-new-app';
-      return folderName;
+      // Use modern browser native directory picker if available
+      if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+        try {
+          const handle = await (window as any).showDirectoryPicker();
+          if (handle && handle.name) {
+            (window as any).__lastSelectedDirHandle = handle;
+            try {
+              const pkgFileHandle = await handle.getFileHandle('package.json');
+              const file = await pkgFileHandle.getFile();
+              const text = await file.text();
+              (window as any).__lastSelectedPackageJson = JSON.parse(text);
+            } catch {
+              (window as any).__lastSelectedPackageJson = null;
+            }
+            return `C:\\Users\\Saksham\\Documents\\${handle.name}`;
+          }
+        } catch (err: any) {
+          if (err.name === 'AbortError') {
+            return null;
+          }
+          console.warn('showDirectoryPicker error:', err);
+        }
+      }
+      return null;
     },
 
-    detectProject: async (folderPath: string) => {
+    detectProject: async (folderPath: string): Promise<ProjectDetection | null> => {
       if (!folderPath) return null;
       const lower = folderPath.toLowerCase();
       const base = folderPath.replace(/[\\/]$/, '').split(/[\\/]/).pop() || 'My App';
+
+      const livePkg = (window as any).__lastSelectedPackageJson;
+      if (livePkg && typeof livePkg === 'object') {
+        const scripts = livePkg.scripts || {};
+        const availableScripts: DetectedScript[] = [];
+        const scriptKeys = Object.keys(scripts);
+
+        for (const key of scriptKeys) {
+          const raw = String(scripts[key]);
+          const fullCommand = key === 'start' || key === 'test' ? `npm ${key}` : `npm run ${key}`;
+          const args = key === 'start' || key === 'test' ? [key] : ['run', key];
+          availableScripts.push({
+            id: `script_${key}`,
+            name: key,
+            command: raw,
+            executable: 'npm',
+            args,
+            full_command: fullCommand,
+            is_recommended: false
+          });
+        }
+
+        const priorityKeys = ['dev', 'start:dev', 'serve', 'develop', 'start'];
+        let recommendedKey = priorityKeys.find(k => scripts[k] !== undefined) || scriptKeys[0];
+        let recommendedScript = availableScripts.find(s => s.name === recommendedKey) || null;
+        if (recommendedScript) recommendedScript.is_recommended = true;
+
+        const allDeps = { ...(livePkg.dependencies || {}), ...(livePkg.devDependencies || {}) };
+        let framework = 'Node.js App';
+        let suggestedDevUrl: string | null = 'http://localhost:3000';
+        const tags: string[] = ['node'];
+
+        if (allDeps['next']) {
+          framework = 'Next.js App';
+          suggestedDevUrl = 'http://localhost:3000';
+          tags.push('nextjs', 'react');
+        } else if (allDeps['vite']) {
+          framework = 'Vite App';
+          suggestedDevUrl = 'http://localhost:5173';
+          tags.push('vite', 'react');
+        } else if (allDeps['react-scripts']) {
+          framework = 'Create React App';
+          suggestedDevUrl = 'http://localhost:3000';
+          tags.push('react');
+        }
+
+        return {
+          framework,
+          project_type: 'node' as const,
+          suggested_name: livePkg.name || base,
+          suggested_dev_url: suggestedDevUrl,
+          suggested_tags: tags,
+          package_manager: 'npm' as const,
+          available_scripts: availableScripts,
+          recommended_script: recommendedScript
+        };
+      }
 
       if (lower.includes('brain dump') || lower.includes('clearstep') || lower.includes('next')) {
         return {
