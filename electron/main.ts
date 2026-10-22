@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { Store } from './store';
 import { ProcessSupervisor } from './processSupervisor';
 import { Project, ProjectWithState, LaunchPreview } from '../src/types';
+import { detectProjectInFolder } from './projectDetector';
 
 let mainWindow: BrowserWindow | null = null;
 let store: Store;
@@ -117,6 +118,12 @@ function setupIpc(): void {
     } catch {
       return path.resolve(selected);
     }
+  });
+
+  // 2b. Auto-detect project configuration from folder
+  ipcMain.handle('localhost:detect-project', async (_event, folderPath: string) => {
+    if (!folderPath) return null;
+    return detectProjectInFolder(folderPath);
   });
 
   // 3. List projects with active run state & path validation

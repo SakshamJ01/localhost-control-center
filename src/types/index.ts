@@ -80,9 +80,31 @@ export interface LaunchPreview {
   warnings: string[];
 }
 
+export interface DetectedScript {
+  id: string;
+  name: string;
+  command: string;
+  executable: string;
+  args: string[];
+  full_command: string;
+  is_recommended: boolean;
+}
+
+export interface ProjectDetection {
+  framework: string;
+  project_type: 'node' | 'python' | 'rust' | 'go' | 'static' | 'unknown';
+  suggested_name: string;
+  suggested_dev_url: string | null;
+  suggested_tags: string[];
+  package_manager: 'npm' | 'pnpm' | 'yarn' | 'bun' | 'python' | 'cargo' | 'go' | 'none';
+  available_scripts: DetectedScript[];
+  recommended_script: DetectedScript | null;
+}
+
 export interface LocalhostApi {
   getDataDir: () => Promise<string>;
   selectFolder: () => Promise<string | null>;
+  detectProject: (folderPath: string) => Promise<ProjectDetection | null>;
   listProjects: () => Promise<ProjectWithState[]>;
   addProject: (data: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'archived_at'>) => Promise<{ success: boolean; project?: Project; error?: string }>;
   updateProject: (id: string, data: Partial<Project>) => Promise<{ success: boolean; project?: Project; error?: string }>;

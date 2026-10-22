@@ -4,6 +4,7 @@ import { LocalhostApi, Project, ProcessRun, OutputChunk, AppSettings } from '../
 const api: LocalhostApi = {
   getDataDir: () => ipcRenderer.invoke('localhost:get-data-dir'),
   selectFolder: () => ipcRenderer.invoke('localhost:select-folder'),
+  detectProject: (folderPath: string) => ipcRenderer.invoke('localhost:detect-project', folderPath),
   listProjects: () => ipcRenderer.invoke('localhost:list-projects'),
   addProject: (data) => ipcRenderer.invoke('localhost:add-project', data),
   updateProject: (id, data) => ipcRenderer.invoke('localhost:update-project', id, data),

@@ -42,6 +42,61 @@ export function setupMockApiIfNeeded(): void {
       return folderName;
     },
 
+    detectProject: async (folderPath: string) => {
+      if (!folderPath) return null;
+      const lower = folderPath.toLowerCase();
+      const base = folderPath.replace(/[\\/]$/, '').split(/[\\/]/).pop() || 'My App';
+
+      if (lower.includes('brain dump') || lower.includes('clearstep') || lower.includes('next')) {
+        return {
+          framework: 'Next.js App',
+          project_type: 'node' as const,
+          suggested_name: 'clearstep',
+          suggested_dev_url: 'http://localhost:3000',
+          suggested_tags: ['nextjs', 'react', 'typescript'],
+          package_manager: 'npm' as const,
+          available_scripts: [
+            { id: 'script_dev', name: 'dev', command: 'next dev', executable: 'npm', args: ['run', 'dev'], full_command: 'npm run dev', is_recommended: true },
+            { id: 'script_build', name: 'build', command: 'next build', executable: 'npm', args: ['run', 'build'], full_command: 'npm run build', is_recommended: false },
+            { id: 'script_start', name: 'start', command: 'next start', executable: 'npm', args: ['start'], full_command: 'npm start', is_recommended: false },
+            { id: 'script_test', name: 'test', command: 'vitest run', executable: 'npm', args: ['test'], full_command: 'npm test', is_recommended: false }
+          ],
+          recommended_script: { id: 'script_dev', name: 'dev', command: 'next dev', executable: 'npm', args: ['run', 'dev'], full_command: 'npm run dev', is_recommended: true }
+        };
+      }
+
+      if (lower.includes('vite') || lower.includes('react')) {
+        return {
+          framework: 'React (Vite) App',
+          project_type: 'node' as const,
+          suggested_name: base,
+          suggested_dev_url: 'http://localhost:5173',
+          suggested_tags: ['vite', 'react'],
+          package_manager: 'npm' as const,
+          available_scripts: [
+            { id: 'script_dev', name: 'dev', command: 'vite', executable: 'npm', args: ['run', 'dev'], full_command: 'npm run dev', is_recommended: true },
+            { id: 'script_build', name: 'build', command: 'vite build', executable: 'npm', args: ['run', 'build'], full_command: 'npm run build', is_recommended: false },
+            { id: 'script_preview', name: 'preview', command: 'vite preview', executable: 'npm', args: ['run', 'preview'], full_command: 'npm run preview', is_recommended: false }
+          ],
+          recommended_script: { id: 'script_dev', name: 'dev', command: 'vite', executable: 'npm', args: ['run', 'dev'], full_command: 'npm run dev', is_recommended: true }
+        };
+      }
+
+      return {
+        framework: 'Node.js App',
+        project_type: 'node' as const,
+        suggested_name: base,
+        suggested_dev_url: 'http://localhost:3000',
+        suggested_tags: ['node'],
+        package_manager: 'npm' as const,
+        available_scripts: [
+          { id: 'script_dev', name: 'dev', command: 'node server.js', executable: 'npm', args: ['run', 'dev'], full_command: 'npm run dev', is_recommended: true },
+          { id: 'script_start', name: 'start', command: 'node server.js', executable: 'npm', args: ['start'], full_command: 'npm start', is_recommended: false }
+        ],
+        recommended_script: { id: 'script_dev', name: 'dev', command: 'node server.js', executable: 'npm', args: ['run', 'dev'], full_command: 'npm run dev', is_recommended: true }
+      };
+    },
+
     listProjects: async (): Promise<ProjectWithState[]> => {
       const projs = loadProjects();
       return projs.map(p => ({
