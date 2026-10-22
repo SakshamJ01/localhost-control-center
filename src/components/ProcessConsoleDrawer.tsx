@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProcessRun, OutputChunk, ProjectWithState } from '../types';
 import { formatElapsedTime } from '../utils/formatters';
+import { AnsiRenderer } from '../utils/ansi';
 import { 
   Square, 
   Terminal, 
@@ -204,7 +205,7 @@ export const ProcessConsoleDrawer: React.FC<ProcessConsoleDrawerProps> = ({
                   chunk.stream === 'system' ? 'stream-system' : 'stream-stdout';
                 return (
                   <span key={index} className={`terminal-line ${streamClass}`}>
-                    {chunk.text}
+                    <AnsiRenderer text={chunk.text} />
                   </span>
                 );
               })}
