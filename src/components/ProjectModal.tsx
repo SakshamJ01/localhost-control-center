@@ -89,8 +89,23 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     }
   };
 
-  const parseArgs = (raw: string): string[] => {
-    return raw.trim() ? raw.trim().split(/\s+/) : [];
+  const parseArgs = (raw: string, execName?: string): string[] => {
+    let cleaned = raw.trim();
+    // If user accidentally typed the executable name at the beginning of arguments
+    if (execName && execName.trim()) {
+      const exec = execName.trim().toLowerCase();
+      if (cleaned.toLowerCase().startsWith(exec + ' ')) {
+        cleaned = cleaned.slice(exec.length).trim();
+      }
+    }
+    // If user entered comma-separated commands (e.g. "npm run dev , npm start"), pick the primary dev command
+    if (cleaned.includes(',')) {
+      cleaned = cleaned.split(',')[0].trim();
+      if (execName && cleaned.toLowerCase().startsWith(execName.trim().toLowerCase() + ' ')) {
+        cleaned = cleaned.slice(execName.trim().length).trim();
+      }
+    }
+    return cleaned ? cleaned.split(/\s+/) : [];
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -117,7 +132,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       canonical_path: canonicalPath.trim(),
       dev_url: devUrl.trim() || null,
       executable: executable.trim() || null,
-      args: parseArgs(argsString),
+      args: parseArgs(argsString, executable),
       working_directory: workingDirectory.trim() || null,
       tags: tagsString.split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
       is_shell_mode: isShellMode,
@@ -137,10 +152,15 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     }
   };
 
-  const previewArgs = parseArgs(argsString);
+  const previewArgs = parseArgs(argsString, executable);
   const previewCommand = executable.trim() 
     ? `${executable.trim()} ${previewArgs.join(' ')}`.trim()
     : 'No launch command configured';
+
+  const hasDuplicateExecInArgs = Boolean(
+    executable.trim() && argsString.trim().toLowerCase().startsWith(executable.trim().toLowerCase() + ' ')
+  );
+  const hasCommasInArgs = argsString.includes(',');
 
   return (
     <div className="modal-backdrop">
@@ -249,6 +269,47 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               Localhost runs this command directly using structured arguments, with zero elevation.
             </p>
 
+            <div className="preset-chips-container">
+              <span className="preset-label">Quick Presets:</span>
+              <div className="preset-buttons">
+                <button
+                  type="button"
+                  className="btn-preset-chip"
+                  onClick={() => { setExecutable('npm'); setArgsString('run dev'); }}
+                >
+                  npm run dev
+                </button>
+                <button
+                  type="button"
+                  className="btn-preset-chip"
+                  onClick={() => { setExecutable('npm'); setArgsString('start'); }}
+                >
+                  npm start
+                </button>
+                <button
+                  type="button"
+                  className="btn-preset-chip"
+                  onClick={() => { setExecutable('python'); setArgsString('app.py'); }}
+                >
+                  python app.py
+                </button>
+                <button
+                  type="button"
+                  className="btn-preset-chip"
+                  onClick={() => { setExecutable('cargo'); setArgsString('run'); }}
+                >
+                  cargo run
+                </button>
+                <button
+                  type="button"
+                  className="btn-preset-chip text-muted"
+                  onClick={() => { setExecutable(''); setArgsString(''); }}
+                >
+                  Folder Only
+                </button>
+              </div>
+            </div>
+
             <div className="grid-two-cols">
               <div className="form-group">
                 <label className="form-label" htmlFor="command-exec">
@@ -260,8 +321,9 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                   className="form-input font-mono text-sm"
                   value={executable}
                   onChange={e => setExecutable(e.target.value)}
-                  placeholder="npm, python, cargo, node"
+                  placeholder="e.g. npm, python, cargo"
                 />
+                <span className="form-help">Program name only (do not include args)</span>
               </div>
 
               <div className="form-group">
@@ -274,10 +336,29 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                   className="form-input font-mono text-sm"
                   value={argsString}
                   onChange={e => setArgsString(e.target.value)}
-                  placeholder="run dev, -m http.server 8080"
+                  placeholder="e.g. run dev (or start)"
                 />
+                <span className="form-help">What comes AFTER the program name</span>
               </div>
             </div>
+
+            {hasDuplicateExecInArgs && (
+              <div className="alert-box alert-info text-xs">
+                <Info size={14} />
+                <span>
+                  <strong>Tip:</strong> "{executable}" is already set as the Executable. We will execute: <code>{previewCommand}</code>
+                </span>
+              </div>
+            )}
+
+            {hasCommasInArgs && (
+              <div className="alert-box alert-warning text-xs">
+                <AlertTriangle size={14} />
+                <span>
+                  <strong>Single Service Rule:</strong> Localhost supervises one continuous service. We will execute: <code>{previewCommand}</code>
+                </span>
+              </div>
+            )}
 
             <div className="form-group">
               <label className="form-label" htmlFor="command-cwd">

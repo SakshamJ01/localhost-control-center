@@ -30,6 +30,37 @@ A calm, local-first desktop control center for managing your local projects, web
 
 ---
 
+## 📖 How to Add & Configure Your Projects
+
+When you register a project in Localhost, the configuration is broken into two simple parts:
+
+### 1. The Core Fields
+- **Project Folder:** Click **`Browse...`** to pick your local repository folder using the native OS file picker.
+- **Project Name:** Any display name you want (e.g., `My Portfolio` or `Inventory API`).
+- **Development URL (optional):** The local URL your server runs on (e.g., `http://localhost:3000` or `http://localhost:5173`). Clicking the link badge on the project card will open this directly in your default browser.
+
+### 2. The Launch Action (Executable vs. Arguments)
+Localhost runs structured commands for security and least privilege. Instead of arbitrary messy shell strings, specify:
+- **Executable:** The program/runtime name **only** (e.g. `npm`, `python`, `cargo`, `node`).
+- **Arguments:** The flags or subcommand passed to that program (e.g. `run dev`, `app.py`, `run`).
+
+> 💡 **Important:** Do not repeat the executable in the arguments field. For example, if **Executable** is `npm`, the **Arguments** should be `run dev`, NOT `npm run dev`.
+
+### Common Project Examples:
+
+| Project Type | Executable | Arguments | Example Dev URL |
+| :--- | :--- | :--- | :--- |
+| **Next.js / Vite / React / Vue** | `npm` | `run dev` | `http://localhost:3000` or `http://localhost:5173` |
+| **Node.js Production Server** | `npm` | `start` | `http://localhost:8080` |
+| **Python Script / Web Server** | `python` | `app.py` | `http://localhost:5000` |
+| **Python FastAPI / Uvicorn** | `python` | `-m uvicorn main:app --reload` | `http://localhost:8000/docs` |
+| **Rust Project** | `cargo` | `run` | `http://localhost:8080` |
+| **Go Project** | `go` | `run .` | `http://localhost:8080` |
+| **Static HTML / Quick Preview** | `npx` | `serve .` | `http://localhost:3000` |
+| **Passive Folder (Notes / Storage)** | *(leave empty)* | *(leave empty)* | *(leave empty)* |
+
+---
+
 ## 🛠️ Stack & Architecture
 
 - **Runtime:** Electron (Windows 10/11 native target)
