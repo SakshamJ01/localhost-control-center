@@ -55,13 +55,28 @@ function createWindow(): void {
     }
   });
 
-  const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
+  const distHtmlPath = path.join(app.getAppPath(), 'dist/index.html');
+  const isDev = process.env.NODE_ENV === 'development';
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL('http://localhost:5173').catch(() => {
+      if (fs.existsSync(distHtmlPath)) {
+        mainWindow?.loadFile(distHtmlPath);
+      }
+    });
+  } else if (fs.existsSync(distHtmlPath)) {
+    mainWindow.loadFile(distHtmlPath);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadURL('http://localhost:5173');
   }
+
+  // Graceful fallback if dev server connection refused
+  mainWindow.webContents.on('did-fail-load', () => {
+    if (fs.existsSync(distHtmlPath)) {
+      console.log('[Main] Dev server unreachable, falling back to local dist bundle.');
+      mainWindow?.loadFile(distHtmlPath);
+    }
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;

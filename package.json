@@ -2,7 +2,7 @@
   "name": "localhost-control-center",
   "version": "0.1.0",
   "description": "Local-first Developer Control Center for managing local projects and services",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
